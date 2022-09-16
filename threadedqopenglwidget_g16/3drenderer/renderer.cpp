@@ -948,7 +948,7 @@ void Renderer::drawUnitVolume()
 			drawStackZ(az, section, b_tex3d, b_stream);
 #else
 			int channels = imgStack_raw_StackZ->getCDim(); 
-			//drawStackZ_grey16(az, section, b_tex3d, b_stream, channels);
+			drawStackZ_grey16(az, section, b_tex3d, b_stream, channels);
 #endif
 		}
 	}
