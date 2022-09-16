@@ -1,0 +1,116 @@
+#version 330 compatibility
+//enable the pointer data load
+#extension GL_NV_shader_buffer_load : enable
+
+out vec4 frag_color;
+
+//volume channel, support maximum 6 channels 
+uniform highp usampler2D channel0;
+uniform highp usampler2D channel1;
+uniform highp usampler2D channel2;
+
+//uniform highp usampler2D texLuts;  //grey 16 rgba, channels*256
+uniform highp usampler2D texHistRange; //channels * [channelOn, min, max, vrange, color]
+
+//uniform sampler2D colormap;
+
+//uniform vec3 channel;
+//uniform int blend_mode;
+//uniform int format_bgra;
+
+vec4 tex_uv; // texture coordination
+
+struct RGBA16 {
+	unsigned short r, g, b, a;
+};
+struct RGB8 {
+	unsigned char r, g, b;
+};
+
+#define HistRangeCols 8 
+#define FILL_CHANNEL 3
+
+unsigned int	mCRaw[FILL_CHANNEL];  //raw data for each channel
+unsigned int	mC[FILL_CHANNEL];	  //data after rescale and brighteness  	
+
+int channel_index_On[FILL_CHANNEL]; //which channels are on 
+int channel_flag_On[FILL_CHANNEL];
+
+int channels_On = 0;
+
+unsigned int hist_min[FILL_CHANNEL];
+unsigned int hist_max[FILL_CHANNEL];
+unsigned int vrange[FILL_CHANNEL];
+
+RGBA16  channel_color[FILL_CHANNEL];
+RGBA16	chColor;
+
+void createHist()
+{
+	//construct the 
+	float FILL_CHANNEL_FACTOR = (FILL_CHANNEL - 1.0);
+	float HistRangeCols_FACTOR = (HistRangeCols - 1.0);
+	//
+	float row = (float)(0) / FILL_CHANNEL_FACTOR;
+	float colIndex = 0.0; 
+	float col = 0.0 / HistRangeCols_FACTOR;
+
+	bool isOn = (bool)(texture(texHistRange, vec2(col, row)).r);
+	channel_flag_On[0] = 1; 
+
+	channel_index_On[channels_On] = 0;
+	channels_On++;
+
+	//hist min
+	colIndex++;
+	col = colIndex / HistRangeCols_FACTOR;
+	hist_min[0] = (unsigned int)((texture(texHistRange, vec2(col, row)).r));
+		
+	//hist max
+	colIndex++;
+	col = colIndex / HistRangeCols_FACTOR;
+	//hist_max[0] = (unsigned int)((texture(texHistRange, vec2(col, row)).r));
+	//v range
+	colIndex++;
+	col = colIndex / HistRangeCols_FACTOR;
+	//vrange[0] = (unsigned int)((texture(texHistRange, vec2(col, row)).r));
+
+	
+
+}
+//////////////////////////////////////
+// lookup and mix multi-channel to RGBA8
+#define OP_MAX	0
+#define OP_SUM	1
+#define OP_MEAN	2
+#define OP_OIT	3  //Order Independent Transparency
+#define OP_INDEX	-1
+
+struct MixOP
+{
+	int op;
+	bool rescale;
+	bool maskR, maskG, maskB;
+	float brightness, contrast; //ratio
+};
+
+void main()
+{
+	tex_uv = gl_TexCoord[0];
+	//createHist();
+	//test hist
+	mCRaw[0] = (unsigned int)(texture(channel0, tex_uv.xy).r); 
+	mCRaw[1] = (unsigned int)(texture(channel1, tex_uv.xy).r); 
+	mCRaw[2] = (unsigned int)(texture(channel2, tex_uv.xy).r); 
+	vec4 vColor;
+
+	vColor.r = ((float)(mCRaw[0])) / 1024;
+	vColor.g = ((float)(mCRaw[1])) / 1024;
+	vColor.b = ((float)(mCRaw[2])) / 1024;
+
+	vColor.a = 255;
+
+	//vec4 c_color = vec4(hist_min[0], 0.0, 0.0, 1.0);
+	//frag_color = vColor * c_color;
+	frag_color = vColor;
+}

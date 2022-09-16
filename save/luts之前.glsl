@@ -1,0 +1,198 @@
+#version 330 compatibility
+//enable the pointer data load
+#extension GL_NV_shader_buffer_load : enable
+
+out vec4 frag_color;
+
+//volume channel, support maximum 6 channels 
+uniform highp usampler2D channel0;
+uniform highp usampler2D channel1;
+uniform highp usampler2D channel2;
+
+//uniform highp usampler2D texLuts;  //grey 16 rgba, channels*256
+uniform highp usampler2D texHistRange; //channels * [channelOn, min, max, vrange, color]
+
+//uniform sampler2D colormap;
+
+//uniform vec3 channel;
+//uniform int blend_mode;
+//uniform int format_bgra;
+
+vec4 tex_uv; // texture coordination
+
+struct RGBA16 {
+	unsigned short r, g, b, a;
+};
+struct RGB8 {
+	unsigned char r, g, b;
+};
+
+#define HistRangeCols 8 
+#define FILL_CHANNEL 3
+
+unsigned int	mCRaw[FILL_CHANNEL];  //raw data for each channel
+unsigned int	mC[FILL_CHANNEL];	  //data after rescale and brighteness  	
+
+int channel_index_On[FILL_CHANNEL]; //which channels are on 
+int channel_flag_On[FILL_CHANNEL];
+
+int channels_On = 0;
+
+unsigned int hist_min[FILL_CHANNEL];
+unsigned int hist_max[FILL_CHANNEL];
+unsigned int vrange[FILL_CHANNEL];
+
+RGBA16  channel_color[FILL_CHANNEL];
+RGBA16	chColor;
+
+void createHist()
+{
+	//construct the 
+	float FILL_CHANNEL_FACTOR = (FILL_CHANNEL - 1.0);
+	float HistRangeCols_FACTOR = (HistRangeCols - 1.0);
+
+	for (int ch = 0; ch < FILL_CHANNEL; ch++)
+	{
+		//
+		//float row = (float)(ch) / (FILL_CHANNEL - 1.0);
+		float row = (float)(ch) / FILL_CHANNEL_FACTOR;
+		float colIndex = 0.0; 
+		//float col = 0.0 / (HistRangeCols - 1.0);
+		float col = 0.0 / HistRangeCols_FACTOR;
+
+		bool isOn = (bool)(texture(texHistRange, vec2(col, row)).r);
+		//channel_flag_On[ch] = isOn ? 1 : 0;
+		channel_flag_On[ch] = 1; 
+		//if (isOn)
+		{
+			channel_index_On[channels_On] = ch;
+			channels_On++;
+		}
+		//hist min
+		colIndex++;
+		/*col = colIndex / (HistRangeCols - 1.0);*/
+		col = colIndex / HistRangeCols_FACTOR;
+		hist_min[ch] = (unsigned int)((texture(texHistRange, vec2(col, row)).r));
+		
+		//hist max
+		colIndex++;
+		col = colIndex / HistRangeCols_FACTOR;
+		hist_max[ch] = (unsigned int)((texture(texHistRange, vec2(col, row)).r));
+		//v range
+		colIndex++;
+		col = colIndex / HistRangeCols_FACTOR;
+		vrange[ch] = (unsigned int)((texture(texHistRange, vec2(col, row)).r));
+
+		//channel color, r 
+		colIndex++;
+		col = colIndex / HistRangeCols_FACTOR;
+		channel_color[ch].r = (unsigned short)((texture(texHistRange, vec2(col, row)).r));
+
+		//channel color, g 
+		colIndex++;
+		col = colIndex / HistRangeCols_FACTOR;
+		channel_color[ch].g = (unsigned short)((texture(texHistRange, vec2(col, row)).r));
+
+		//channel color, b 
+		colIndex++;
+		col = colIndex / HistRangeCols_FACTOR;
+		channel_color[ch].b = (unsigned short)((texture(texHistRange, vec2(col, row)).r));
+
+		//channel color, a 
+		colIndex++;
+		col = colIndex / HistRangeCols_FACTOR;
+		channel_color[ch].a = (unsigned short)((texture(texHistRange, vec2(col, row)).r));
+
+		// 
+		mCRaw[ch] = 0U;
+
+		//if (isOn)
+		/*{
+			switch (ch)
+			{
+				case 0: mCRaw[ch] = (unsigned int)(texture(channel0, tex_uv.xy).r); break;
+				case 1: mCRaw[ch] = (unsigned int)(texture(channel1, tex_uv.xy).r); break;
+				case 2: mCRaw[ch] = (unsigned int)(texture(channel2, tex_uv.xy).r); break;
+				case 3: mCRaw[ch] = (unsigned int)(texture(channel3, tex_uv.xy).r); break;
+			
+			}
+		}*/
+	}
+
+	mCRaw[0] = (unsigned int)(texture(channel0, tex_uv.xy).r); 
+	mCRaw[1] = (unsigned int)(texture(channel1, tex_uv.xy).r); 
+	mCRaw[2] = (unsigned int)(texture(channel2, tex_uv.xy).r); 
+
+}
+//////////////////////////////////////
+// lookup and mix multi-channel to RGBA8
+#define OP_MAX	0
+#define OP_SUM	1
+#define OP_MEAN	2
+#define OP_OIT	3  //Order Independent Transparency
+#define OP_INDEX	-1
+
+struct MixOP
+{
+	int op;
+	bool rescale;
+	bool maskR, maskG, maskB;
+	float brightness, contrast; //ratio
+};
+
+void main()
+{
+	tex_uv = gl_TexCoord[0];
+	createHist();
+	//test hist
+
+	vec4 vColor;
+
+	vColor.r = ((float)(mCRaw[0])) / 1024;
+	vColor.g = ((float)(mCRaw[1])) / 1024;
+	vColor.b = ((float)(mCRaw[2])) / 1024;
+
+	vColor.a = 255;
+
+	MixOP mixOp;
+
+	//MixOP init
+	mixOp.rescale = true;
+	mixOp.op = OP_MAX;
+	mixOp.maskR = mixOp.maskG = mixOp.maskB = true;
+	mixOp.brightness = 0;
+	mixOp.contrast = 1;
+
+	//get MixOP  value
+	bool bRescale = mixOp.rescale;
+	float fb = mixOp.brightness;
+	float fc = mixOp.contrast;
+	int op = mixOp.op;
+
+	RGB8 mask;
+	mask.r = (mixOp.maskR) ? (unsigned char)255 : (unsigned char)0;
+	mask.g = (mixOp.maskG) ? (unsigned char)255 : (unsigned char)0;
+	mask.b = (mixOp.maskB) ? (unsigned char)255 : (unsigned char)0;
+
+	int k;
+	unsigned int C;
+	float CC;
+
+	for (int k_on = 0; k_on < channels_On; k_on++)
+	{
+		k = channel_index_On[k_on];
+		C = mCRaw[k];
+		C = clamp(C, hist_min[k], hist_max[k]);
+		CC = (float)C; 
+		if (fc != 1 || fb != 0)
+		{
+			CC = CC*(fc)+(fb*(float)vrange[k]);
+			CC = clamp(CC, (float)(hist_min[k]), (float)(hist_max[k]));
+		}
+		//rewrite to the original
+		C = (unsigned int)CC;
+		mC[k] = (!bRescale) ? C : ((C - hist_min[k]) << 8) / vrange[k];  // rescale to [0, 255]
+	} //end of K
+
+	frag_color = vColor;
+}

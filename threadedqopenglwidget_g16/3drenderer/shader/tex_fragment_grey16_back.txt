@@ -1,0 +1,24 @@
+
+#ifdef TEX3D
+uniform sampler3D volume;
+#else
+uniform sampler2D volume_c1;
+uniform sampler2D volume_c2;
+
+#endif
+
+uniform sampler2D colormap;
+
+uniform vec3 channel;
+uniform int blend_mode;
+uniform int format_bgra;
+
+in vec2 TexCoord; 
+
+//////////////////////////////////////
+void main()
+{
+	vec4 oColor = mix(texture(volume_c1,TexCoord),texture(volume_c2,TexCoord),0.2);
+	gl_FragColor = gl_Color * oColor; // modulated by color_proxy
+
+}

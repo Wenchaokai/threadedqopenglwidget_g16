@@ -1,0 +1,20 @@
+<RCC>
+  <qresource prefix="/">
+	   <file>shader/lighting.txt</file>
+     <file>shader/color_vertex.txt</file>
+     <file>shader/vertex_normal.txt</file>
+     <file>shader/color_fragment.txt</file>
+     <file>shader/obj_fragment.txt</file>
+     <file>shader/tex_fragment.txt</file>
+	 <file>shader/vs_grey.glsl</file>
+	 <file>shader/tex_fragment_grey16_opt1.glsl</file>
+
+     <file>shader/obg_rgb.fs</file>
+     <file>shader/obg_grey16.vs</file>
+     <file>shader/obg_grey16.fs</file>
+     <file>shader/obg_grey16_texturearray.fs</file>
+     <file>shader/backfill_grey16.vs</file>
+     <file>shader/backfill_grey16.fs</file>
+
+  </qresource>
+</RCC>
